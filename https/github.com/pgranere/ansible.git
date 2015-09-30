@@ -1,0 +1,52 @@
+- name: Copy ssh config
+  template: src=ssh_config dest=/home/{{ansible_ssh_user}}/.ssh/config
+    mode=0600 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Copy npmrc config
+  template: src=npmrc dest=/home/{{ansible_ssh_user}}/.npmrc
+    mode=0600 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Clone Find project
+  sudo: no
+  git: repo={{git_project_uri}} dest={{git_deploy_path}}/find-delivery-processor force=yes recursive=no accept_hostkey=yes key_file=/home/{{ansible_ssh_user}}/.ssh/find-github version={{find_processor_version}}
+
+- name: Set NODE_ENV on host
+  sudo: no
+  lineinfile: dest=~/.bashrc state=present line="export NODE_ENV={{aws_environment}}"
+
+- name: Set DEBUG on host
+  sudo: no
+  lineinfile: dest=~/.bashrc state=present line="export DEBUG={{find_delivery_processor_debugging}}"
+
+- name: Copy find-delivery-processor pm2 config
+  template: src=pm2.conf.j2 dest={{git_deploy_path}}/find-delivery-processor/find-delivery-processor/pm2.json
+    mode=0644 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Install npm dependencies
+  sudo: no
+  npm: path={{git_deploy_path}}/find-delivery-processor/find-delivery-processor
+
+- name: Copy find-delivery-processor config
+  template: src=find-delivery-processor.conf.j2 dest={{git_deploy_path}}/find-delivery-processor/find-delivery-processor/src/config/env/{{aws_environment}}.js
+    mode=0644 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Copy find-producer config
+  template: src=find-producer.conf.j2 dest={{git_deploy_path}}/find-delivery-processor/find-delivery-processor/node_modules/find-producer/src/config/env/{{aws_environment}}.js
+    mode=0644 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Copy find-consumer config
+  template: src=find-consumer.conf.j2 dest={{git_deploy_path}}/find-delivery-processor/find-delivery-processor/node_modules/find-consumer/src/config/env/{{aws_environment}}.js
+    mode=0644 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Copy porter-event config
+  template: src=porter-event.conf.j2 dest={{git_deploy_path}}/find-delivery-processor/find-delivery-processor/node_modules/porter-event/src/config/env/{{aws_environment}}.js
+    mode=0644 owner={{ansible_ssh_user}} group={{ansible_ssh_user}}
+
+- name: Un-deploy app from pm2
+  ignore_errors: yes
+  sudo: no
+  shell: pm2 delete find-delivery-processor
+
+- name: Deploy app to pm2
+  sudo: no
+  shell: pm2 start {{git_deploy_path}}/find-delivery-processor/find-delivery-processor/pm2.json
